@@ -728,7 +728,7 @@ class UARTMonitor(QMainWindow):
         self.sata1_btn.clicked.connect(self._activate_sata1)
         layout.addWidget(self.sata1_btn)
         
-        self.satas_btn = QPushButton("SATA0 & SATA1\nZEROIZE ACTIVATE")
+        self.satas_btn = QPushButton("SATA0 && SATA1\nZEROIZE ACTIVATE")
         self.satas_btn.setMinimumHeight(36)
         self.satas_btn.setMaximumHeight(40)
         self.satas_btn.setStyleSheet(f"""
