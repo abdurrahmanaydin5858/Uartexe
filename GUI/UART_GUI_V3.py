@@ -24,7 +24,7 @@ class AppStyle:
     SURFACE_LIGHT = "#2d2d30"
     PRIMARY = "#0e639c"
     PRIMARY_DARK = "#094771"
-    SUCCESS = "#39ae3d"
+    SUCCESS = "#4caf50"
     ERROR = "#f44336"
     WARNING = "#ff9800"
     TEXT = "#cccccc"
@@ -32,7 +32,7 @@ class AppStyle:
     BORDER = "#3e3e42"
     
     # Status colors - Updated per feedback
-    STATUS_ENABLED = "#39ae3d"     # Green for enabled/OK
+    STATUS_ENABLED = "#2e7d32"      # Green for enabled/OK
     STATUS_DISABLED = "#c62828"     # Red for disabled/error
     STATUS_NEUTRAL = "#ffffff"      # White for neutral disabled
     STATUS_NA = "#666666"           # Gray for N/A
@@ -220,7 +220,7 @@ class UARTMonitor(QMainWindow):
     WINDOW_TITLE = "UART MONITORING INTERFACE"
     WINDOW_WIDTH = 1800
     WINDOW_HEIGHT = 950
-    TIMER_INTERVAL = 100  # milliseconds (gelen verileri 100ms'de bir okur ve tabloyu günceller)
+    TIMER_INTERVAL = 100  # milliseconds
     PACKET_SIZE = 133
     DATA_SIZE = 128
     
@@ -286,11 +286,8 @@ class UARTMonitor(QMainWindow):
         # Set limits for first byte of each pair
         for first_byte, second_byte in voltage_current_power_pairs:
             self.data_limits['min'][first_byte] = 0
-            self.data_limits['max'][first_byte] = 50
-
-            self.data_limits['min'][second_byte] = 0
-            self.data_limits['max'][second_byte] = 255
-
+            self.data_limits['max'][first_byte] = 255
+            # Second byte remains as 'N/A'
         
         # Temperature sensor indices (always green)
         self.temp_indices = [79, 80, 81, 82, 83, 84, 85]
@@ -422,12 +419,12 @@ class UARTMonitor(QMainWindow):
         
         # Column widths
         column_widths = {
-            0: 40,   # Index
+            0: 30,   # Index
             1: 150,  # Signal name
             2: 40,   # Min
-            3: 40,   # Value
+            3: 45,   # Value
             4: 40,   # Max
-            5: 300  # Meaning
+            5: 120   # Meaning
         }
         
         for i in range(18):
@@ -435,15 +432,6 @@ class UARTMonitor(QMainWindow):
             table.setColumnWidth(i, column_widths[col_type])
         
         self._populate_table(table)
-        
-        # '#' sütunlarını ortalama ve arka plan rengi ayarlama
-        for row in range(rows_per_column):
-            for col in [0, 6, 12]:  # '#' sütunları (0, 6, 12)
-                item = table.item(row, col)
-                if item:
-                    item.setTextAlignment(Qt.AlignCenter)
-                    item.setBackground(QColor("#224055"))  # Arka plan rengi
-        
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         
         return table
@@ -472,7 +460,7 @@ class UARTMonitor(QMainWindow):
                 
                 # Min value
                 min_val = self.data_limits['min'][i]
-                if min_val == 'N/A':
+                if min_val == 'N/A' or is_second_byte:
                     min_item = QTableWidgetItem("N/A")
                     min_item.setBackground(QColor(AppStyle.TABLE_NA))
                 else:
@@ -480,15 +468,16 @@ class UARTMonitor(QMainWindow):
                 table.setItem(row, base_col + 2, min_item)
                 
                 # Current value with color coding
-                
                 value_item = QTableWidgetItem("0")
-            
-                value_item.setBackground(self._get_value_color(i, 0))
+                if is_second_byte:
+                    value_item.setBackground(QColor(AppStyle.TABLE_NA))
+                else:
+                    value_item.setBackground(self._get_value_color(i, 0))
                 table.setItem(row, base_col + 3, value_item)
                 
                 # Max value
                 max_val = self.data_limits['max'][i]
-                if max_val == 'N/A':
+                if max_val == 'N/A' or is_second_byte:
                     max_item = QTableWidgetItem("N/A")
                     max_item.setBackground(QColor(AppStyle.TABLE_NA))
                 else:
@@ -496,7 +485,11 @@ class UARTMonitor(QMainWindow):
                 table.setItem(row, base_col + 4, max_item)
                 
                 # Meaning
-                meaning_item = QTableWidgetItem("N/A")
+                if is_second_byte:
+                    meaning_item = QTableWidgetItem("N/A")
+                    meaning_item.setBackground(QColor(AppStyle.TABLE_NA))
+                else:
+                    meaning_item = QTableWidgetItem("N/A")
                 table.setItem(row, base_col + 5, meaning_item)
     
     def _is_second_byte_of_pair(self, index):
@@ -563,8 +556,8 @@ class UARTMonitor(QMainWindow):
             elif "GPU" in label:
                 btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: {AppStyle.STATUS_DISABLED};
-                        color: white;
+                        background-color: {AppStyle.STATUS_NEUTRAL};
+                        color: black;
                         font-weight: bold;
                         font-size: 9px;
                         border-radius: 4px;
@@ -948,16 +941,14 @@ class UARTMonitor(QMainWindow):
     
     def _process_packet(self, packet):
         """Process received packet data"""
-        # Transfer the incoming packet data to the received_data list.
         for i in range(self.DATA_SIZE):
-            if i < len(packet):
-                self.received_data[i] = packet[i]
+            if i + 4 < len(packet):
+                self.received_data[i] = packet[i + 4]
         
-        # These functions will now be called with the correct data.
         self._update_table()
         self._update_status_buttons()
         self._update_disc_in_status()
-        
+    
     def _update_table(self):
         """Update table with new data"""
         rows_per_column = 43
@@ -971,13 +962,13 @@ class UARTMonitor(QMainWindow):
                 value = self.received_data[i]
                 
                 # Skip second bytes of pairs for value updates
-                # if self._is_second_byte_of_pair(i):
-                #    continue
+                if self._is_second_byte_of_pair(i):
+                    continue
                 
                 # Update value
                 item = self.table_widget.item(row, base_col + 3)
                 if item:
-                    item.setText(f"0x{value:02X}")
+                    item.setText(str(value))
                     item.setBackground(self._get_value_color(i, value))
                 
                 # Update meaning
@@ -1046,7 +1037,7 @@ class UARTMonitor(QMainWindow):
                         btn.setText(f"● {label}\nDISABLED")
                         btn.setStyleSheet(f"""
                             QPushButton {{
-                                background-color: {AppStyle.STATUS_DISABLED};
+                                background-color: {AppStyle.STATUS_NEUTRAL};
                                 color: black;
                                 font-weight: bold;
                                 font-size: 9px;
@@ -1258,46 +1249,14 @@ class UARTMonitor(QMainWindow):
         # Status registers
         if index in [25, 32, 39, 46, 53, 60]:  # LTC4281 STATUS registers
             status_bits = []
-            if value & 0x80:
-                 status_bits.append("ON STATUS: POWER ON")
-            else:
-                 status_bits.append("ON STATUS: POWER OFF")
-
-            if value & 0x40:
-                 status_bits.append("COOLDOWN STATUS: FAULTY SWITCH DETECTED - COOLING DOWN ISSUED")
-            else:
-                 status_bits.append("COOLDOWN STATUS: NORMAL CONDITION")
-
-            if value & 0x20:
-                 status_bits.append("SHORT RESENT: SHORTED SWITCH DETECTED")
-            else:
-                 status_bits.append("SHORT RESENT: NORMAL CONDITION")
-
-            if value & 0x10:
-                 status_bits.append("ON PIN STATUS: ON SIGNAL ACTIVE")
-            else:
-                 status_bits.append("ON PIN STATUS: ON SIGNAL INACTIVE")
-                     
-            if value & 0x08:
-                 status_bits.append("POWER GOOD STATUS: LTC4281 POWER GOOD")
-            else:
-                 status_bits.append("POWER GOOD STATUS: POWER NOT GOOD")
-
-            if value & 0x04:
-                 status_bits.append("OC COOLDOWN STATUS: OVER CURRENT DETECTED - COOLING DOWN ISSUED")
-            else:
-                 status_bits.append("OC COOLDOWN STATUS: NORMAL CONDITION")
-            
-            if value & 0x02:
-                 status_bits.append("UV STATUS: VOLTAGE UNDER THRESHOLD")
-            else:
-                 status_bits.append("UV STATUS: INSIDE THE LIMITS")
-
-            if value & 0x01:
-                 status_bits.append("OV STATUS: VOLTAGE OVER THRESHOLD")
-            else:
-                 status_bits.append("OV STATUS: INSIDE THE LIMITS")
-
+            if value & 0x80: status_bits.append("ON")
+            if value & 0x40: status_bits.append("COOLDOWN")
+            if value & 0x20: status_bits.append("SHORT")
+            if value & 0x10: status_bits.append("ON_PIN")
+            if value & 0x08: status_bits.append("PGOOD")
+            if value & 0x04: status_bits.append("OC_COOL")
+            if value & 0x02: status_bits.append("UV")
+            if value & 0x01: status_bits.append("OV")
             return ", ".join(status_bits) if status_bits else "NORMAL"
         
         return "N/A"
