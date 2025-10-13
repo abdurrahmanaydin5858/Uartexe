@@ -250,7 +250,7 @@ class UARTMonitor(QMainWindow):
         super().__init__()
         self.serial_port = None
         self.is_connected = False
-        self.received_data = [0] * self.DATA_SIZE
+        self.received_data = [0] * self.PACKET_SIZE
         self.disc_type = "OPEN/GND"  # Default disc type
         self.sata_command_to_send = (0, 0)
         self._init_data_limits()
