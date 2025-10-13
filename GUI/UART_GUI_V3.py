@@ -238,7 +238,7 @@ class UARTMonitor(QMainWindow):
     WINDOW_HEIGHT = 950
     TIMER_INTERVAL = 100  # milliseconds (gelen verileri 100ms'de bir okur ve tabloyu günceller)
     PACKET_SIZE = 133
-    DATA_SIZE = 128
+    DATA_SIZE = 132
     
     # Protocol constants
     HEADER_1 = 0x41
@@ -252,7 +252,7 @@ class UARTMonitor(QMainWindow):
         self.is_connected = False
         self.received_data = [0] * self.DATA_SIZE
         self.disc_type = "OPEN/GND"  # Default disc type
-        
+        self.sata_command_to_send = (0, 0)
         self._init_data_limits()
         self._init_ui()
         self._init_timer()
@@ -432,7 +432,7 @@ class UARTMonitor(QMainWindow):
         """Create the main data table"""
         table = QTableWidget()
         
-        rows_per_column = 43
+        rows_per_column = 44
         table.setRowCount(rows_per_column)
         table.setColumnCount(18)
         
@@ -450,11 +450,11 @@ class UARTMonitor(QMainWindow):
         # Column widths
         column_widths = {
             0: 30,   # Index
-            1: 150,  # Signal name
+            1: 165,  # Signal name
             2: 40,   # Min
             3: 40,   # Value
             4: 40,   # Max
-            5: 150  # Meaning
+            5: 120  # Meaning
         }
         
         for i in range(18):
@@ -504,7 +504,7 @@ class UARTMonitor(QMainWindow):
     def _populate_table(self, table):
         """Populate the table with initial data"""
         signal_names = self._get_signal_names()
-        rows_per_column = 43
+        rows_per_column = 44
         
         for i in range(self.DATA_SIZE):
             col_group = i // rows_per_column
@@ -709,10 +709,11 @@ class UARTMonitor(QMainWindow):
         return group
     
     def _set_disc_type(self, disc_type):
-        """Set the DISC type"""
+        """Set the DISC type and send an updated command packet."""
         self.disc_type = disc_type
         print(f"DISC type set to: {disc_type}")
-        # TODO: Send command to device if needed
+        self._build_and_send_command_packet() # Send updated state
+
     
     def _create_disc_out_controls(self):
         """Create DISC OUT control buttons - Updated from TX"""
@@ -860,8 +861,10 @@ class UARTMonitor(QMainWindow):
         )
         
         if reply == QMessageBox.Yes:
-            self._send_sata_command(sata1=True, sata0=False)
-            QMessageBox.information(self, 'INFO', 'SATA1 ZEROIZE COMMAND SENT.')
+            # Set the one-shot command and send the packet
+            self.sata_command_to_send = (0xAA, 0x55)
+            self._build_and_send_command_packet()
+            QMessageBox.information(self, 'INFO', 'SATA1 Zeroize command sent.')
     
     def _activate_satas(self):
         """Activate both SATA0 and SATA1 with confirmation"""
@@ -875,28 +878,75 @@ class UARTMonitor(QMainWindow):
         )
         
         if reply == QMessageBox.Yes:
-            self._send_sata_command(sata1=True, sata0=True)
-            QMessageBox.information(self, 'INFO', 'SATA0 & SATA1 ZEROIZE COMMAND SENT.')
-    
-    def _send_sata_command(self, sata1=False, sata0=False):
-        """Send SATA activation command"""
-        if not self.serial_port or not self.serial_port.is_open:
-            QMessageBox.warning(self, 'WARNING', 'SERIAL PORT NOT CONNECTED!')
+            # Set the one-shot command and send the packet
+            self.sata_command_to_send = (0xBB, 0x44)
+            self._build_and_send_command_packet()
+            QMessageBox.information(self, 'INFO', 'SATA0 & SATA1 Zeroize command sent.')
+            
+    def _build_and_send_command_packet(self):
+        """
+        Gathers the current state of all UI controls, builds the 37-byte command packet,
+        calculates the checksum, and sends it via UART.
+        """
+        if not self.is_connected:
+            QMessageBox.warning(self, 'WARNING', 'NOT CONNECTED! PLEASE CONNECT FIRST.')
             return
-        
-        command = bytearray([self.HEADER_1, self.HEADER_2, 0x05, 0x30])
-        
-        sata_mask = (0x01 if sata0 else 0x00) | (0x02 if sata1 else 0x00)
-        command.append(sata_mask)
-        
-        checksum = (256 - (sum(command) % 256)) % 256
-        command.append(checksum)
-        
+
+        # Initialize a 37-byte packet with all zeros.
+        command_packet = bytearray(37)
+
+        # Bytes 0-4: Headers, Packet length, ID
+        command_packet[0] = self.HEADER_1
+        command_packet[1] = self.HEADER_2
+        command_packet[2] = 37  # Packet length
+        command_packet[3] = 0x01 # ID
+
+        # Byte 4: Sense Select
+        if self.disc_type == "OPEN/28V":
+            command_packet[4] = 0x01
+        else: # OPEN/GND
+            command_packet[4] = 0x00
+
+        # Byte 5: Disc Out Drives
+        disc_out_byte = 0
+        for i, button in enumerate(self.disc_out_buttons):
+            if button.isChecked():
+                disc_out_byte |= (1 << i)  # Set bit 'i' to 1
+        command_packet[5] = disc_out_byte
+
+        # Bytes 6 & 7: SATA Zeroize Command
+        # This is set by _activate_sata... functions right before sending.
+        command_packet[6] = self.sata_command_to_send[0]
+        command_packet[7] = self.sata_command_to_send[1]
+
+        # Byte 8: Zeroize SATA LSB (Assuming this is a separate flag, not used by buttons)
+        # Kept as 0 for now as per your description.
+        command_packet[8] = 0 
+
+        # Byte 9: LED Control
+        led_byte = 0
+        if self.led_buttons[0].isChecked(): led_byte |= 0b001  # Red LED
+        if self.led_buttons[1].isChecked(): led_byte |= 0b010  # Green LED
+        if self.led_buttons[2].isChecked(): led_byte |= 0b100  # Blue LED
+        command_packet[9] = led_byte
+
+        # Bytes 10-35 are already 0 (Reserved)
+
+        # Byte 36: Checksum
+        # Calculate checksum over the first 36 data bytes.
+        checksum = (256 - (sum(command_packet[0:36]) % 256)) % 256
+        command_packet[36] = checksum
+
+        # --- Send the final packet ---
         try:
-            self.serial_port.write(command)
-            print(f"SATA command sent: {' '.join([f'0x{b:02X}' for b in command])}")
+            self.serial_port.write(command_packet)
+            print(f"Sent Packet: {' '.join(f'{b:02X}' for b in command_packet)}")
         except Exception as e:
-            QMessageBox.critical(self, 'ERROR', f'SATA COMMAND FAILED: {str(e)}')
+            QMessageBox.critical(self, 'Send Error', f'Failed to send command: {str(e)}')
+        
+        # Reset one-shot commands after sending
+        self.sata_command_to_send = (0, 0)
+
     
     def _refresh_com_ports(self):
         """Refresh the list of available COM ports"""
@@ -982,12 +1032,19 @@ class UARTMonitor(QMainWindow):
             print(f"Read error: {e}")
     
     def _validate_packet(self, packet):
-        """Validate packet checksum"""
+        """
+        Validates the packet using the Two's Complement checksum method.
+        Checks if the sum of ALL 133 bytes is zero (in 8-bit).
+        """
         if len(packet) != self.PACKET_SIZE:
             return False
-        
-        checksum = sum(packet[:self.PACKET_SIZE-1]) & 0xFF
-        return checksum == 0x00
+
+        # Paketin tamamını (133 byte) topla ve sonucun 8-bitlik değerinin
+        # sıfır olup olmadığını kontrol et.
+        if sum(packet) & 0xFF == 0:
+            return True
+        else:
+            return False
     
     def _process_packet(self, packet):
         """Process received packet data"""
@@ -1003,7 +1060,7 @@ class UARTMonitor(QMainWindow):
         
     def _update_table(self):
         """Update table with new data"""
-        rows_per_column = 43
+        rows_per_column = 44
         
         for i in range(self.DATA_SIZE):
             col_group = i // rows_per_column
@@ -1011,6 +1068,7 @@ class UARTMonitor(QMainWindow):
             second_voltage_bytes = [26,33,40,47,54,61,67,73]
             second_current_bytes = [28,35,42,49,56,63,69,75]
             second_power_bytes   = [30,37,44,51,58,65,71,77]
+
             if col_group < 3:
                 base_col = col_group * 6
                 value = self.received_data[i]
@@ -1018,12 +1076,14 @@ class UARTMonitor(QMainWindow):
 
                 # Update value
                 item = self.table_widget.item(row, base_col + 3)
+                # Update meaning
+                meaning_item = self.table_widget.item(row, base_col + 5)
                 if item:
                     item.setText(f"0x{value:02X}")
                     item.setBackground(self._get_value_color(i, value))
+                    meaning_item.setBackground(self._get_value_color(i, value))
                 
-                # Update meaning
-                meaning_item = self.table_widget.item(row, base_col + 5)
+                
                 if meaning_item:
                     if i in second_voltage_bytes:
                         meaning_text = self._get_voltage_meaning((i), value, next_value)
@@ -1036,6 +1096,8 @@ class UARTMonitor(QMainWindow):
                         # Set background color based on the error status
                         if is_error:
                             meaning_item.setBackground(QColor(183, 28, 28))
+                        else:
+                            meaning_item.setBackground(QColor(66, 66, 66))
                     meaning_item.setText(meaning_text)
                         
                     
@@ -1169,7 +1231,6 @@ class UARTMonitor(QMainWindow):
                     font-size: 8px;
                 }}
             """)
-            self._send_disc_out_command(index, True)
         else:
             button.setText(button.text().split('\n')[0] + "\nDISABLED")
             button.setStyleSheet(f"""
@@ -1180,7 +1241,7 @@ class UARTMonitor(QMainWindow):
                     font-size: 8px;
                 }}
             """)
-            self._send_disc_out_command(index, False)
+        self._build_and_send_command_packet()
     
     def _toggle_led_button(self, button, checked, color, name):
         """Toggle LED button state"""
@@ -1200,7 +1261,6 @@ class UARTMonitor(QMainWindow):
                     padding-left: 10px;
                 }}
             """)
-            self._send_led_command(self.led_buttons.index(button), True)
         else:
             button.setText(f"● LED {name}\nDISABLED")
             button.setStyleSheet(f"""
@@ -1213,35 +1273,8 @@ class UARTMonitor(QMainWindow):
                     padding-left: 10px;
                 }}
             """)
-            self._send_led_command(self.led_buttons.index(button), False)
+        self._build_and_send_command_packet() # Send updated state
     
-    def _send_disc_out_command(self, index, enable):
-        """Send DISC OUT control command (formerly TX)"""
-        if not self.serial_port or not self.serial_port.is_open:
-            return
-        
-        command = bytearray([self.HEADER_1, self.HEADER_2, 0x05, 0x10 + index, int(enable)])
-        checksum = (256 - (sum(command) % 256)) % 256
-        command.append(checksum)
-        
-        try:
-            self.serial_port.write(command)
-        except Exception as e:
-            print(f"DISC OUT send error: {e}")
-    
-    def _send_led_command(self, index, enable):
-        """Send LED control command"""
-        if not self.serial_port or not self.serial_port.is_open:
-            return
-        
-        command = bytearray([self.HEADER_1, self.HEADER_2, 0x05, 0x20 + index, int(enable)])
-        checksum = (256 - (sum(command) % 256)) % 256
-        command.append(checksum)
-        
-        try:
-            self.serial_port.write(command)
-        except Exception as e:
-            print(f"LED send error: {e}")
     
     def _get_signal_names(self):
         """Get signal name mappings"""
@@ -1259,30 +1292,30 @@ class UARTMonitor(QMainWindow):
             26: "LTC4281_CPU_VOLTAGE_1", 27: "LTC4281_CPU_VOLTAGE_2",
             28: "LTC4281_CPU_CURRENT_1", 29: "LTC4281_CPU_CURRENT_2",
             30: "LTC4281_CPU_POWER_1", 31: "LTC4281_CPU_POWER_2",
-            32: "LTC4281_SATA0_STATUS", 33: "LTC4281_SATA0_VOLTAGE_1",
-            34: "LTC4281_SATA0_VOLTAGE_2", 35: "LTC4281_SATA0_CURRENT_1",
-            36: "LTC4281_SATA0_CURRENT_2", 37: "LTC4281_SATA0_POWER_1",
-            38: "LTC4281_SATA0_POWER_2", 39: "LTC4281_SATA1_STATUS",
-            40: "LTC4281_SATA1_VOLTAGE_1", 41: "LTC4281_SATA1_VOLTAGE_2",
-            42: "LTC4281_SATA1_CURRENT_1", 43: "LTC4281_SATA1_CURRENT_2",
-            44: "LTC4281_SATA1_POWER_1", 45: "LTC4281_SATA1_POWER_2",
+            32: "LTC4281_SATA0_3V3_STATUS", 33: "LTC4281_SATA0_3V3_VOLTAGE_1",
+            34: "LTC4281_SATA0_3V3_VOLTAGE_2", 35: "LTC4281_SATA0_3V3_CURRENT_1",
+            36: "LTC4281_SATA0_3V3_CURRENT_2", 37: "LTC4281_SATA0_3V3_POWER_1",
+            38: "LTC4281_SATA0_3V3_POWER_2", 39: "LTC4281_SATA1_3V3_STATUS",
+            40: "LTC4281_SATA1_3V3_VOLTAGE_1", 41: "LTC4281_SATA1_3V3_VOLTAGE_2",
+            42: "LTC4281_SATA1_3V3_CURRENT_1", 43: "LTC4281_SATA1_3V3_CURRENT_2",
+            44: "LTC4281_SATA1_3V3_POWER_1", 45: "LTC4281_SATA1_3V3_POWER_2",
             46: "LTC4281_GPU_12V_STATUS", 47: "LTC4281_GPU_12V_VOLTAGE_1",
             48: "LTC4281_GPU_12V_VOLTAGE_2", 49: "LTC4281_GPU_12V_CURRENT_1",
             50: "LTC4281_GPU_12V_CURRENT_2", 51: "LTC4281_GPU_12V_POWER_1",
-            52: "LTC4281_GPU_12V_POWER_2", 53: "LTC4281_GPU_3V3_STATUS",
-            54: "LTC4281_GPU_3V3_VOLTAGE_1", 55: "LTC4281_GPU_3V3_VOLTAGE_2",
-            56: "LTC4281_GPU_3V3_CURRENT_1", 57: "LTC4281_GPU_3V3_CURRENT_2",
-            58: "LTC4281_GPU_3V3_POWER_1", 59: "LTC4281_GPU_3V3_POWER_2",
-            60: "LTC4281_GPU_5V_STATUS", 61: "LTC4281_GPU_5V_VOLTAGE_1",
-            62: "LTC4281_GPU_5V_VOLTAGE_2", 63: "LTC4281_GPU_5V_CURRENT_1",
-            64: "LTC4281_GPU_5V_CURRENT_2", 65: "LTC4281_GPU_5V_POWER_1",
-            66: "LTC4281_GPU_5V_POWER_2", 67: "INA260_PWR_BOARD_VOLTAGE_1",
-            68: "INA260_PWR_BOARD_VOLTAGE_2", 69: "INA260_PWR_BOARD_CURRENT_1",
-            70: "INA260_PWR_BOARD_CURRENT_2", 71: "INA260_PWR_BOARD_POWER_1",
-            72: "INA260_PWR_BOARD_POWER_2", 73: "INA260_CPLD_VOLTAGE_1",
-            74: "INA260_CPLD_VOLTAGE_2", 75: "INA260_CPLD_CURRENT_1",
-            76: "INA260_CPLD_CURRENT_2", 77: "INA260_CPLD_POWER_1",
-            78: "INA260_CPLD_POWER_2", 79: "TMP100_CPLD_TEMP",
+            52: "LTC4281_GPU_12V_POWER_2", 53: "LTC4281_GPU_5V_STATUS",
+            54: "LTC4281_GPU_5V_VOLTAGE_1", 55: "LTC4281_GPU_5V_VOLTAGE_2",
+            56: "LTC4281_GPU_5V_CURRENT_1", 57: "LTC4281_GPU_5V_CURRENT_2",
+            58: "LTC4281_GPU_5V_POWER_1", 59: "LTC4281_GPU_5V_POWER_2",
+            60: "LTC4281_GPU_3V3_STATUS", 61: "LTC4281_GPU_3V3_VOLTAGE_1",
+            62: "LTC4281_GPU_3V3_VOLTAGE_2", 63: "LTC4281_GPU_3V3_CURRENT_1",
+            64: "LTC4281_GPU_3V3_CURRENT_2", 65: "LTC4281_GPU_3V3_POWER_1",
+            66: "LTC4281_GPU_3V3_POWER_2", 67: "INA260_PWR_BOARD_27V_VOLTAGE_1",
+            68: "INA260_PWR_BOARD_27V_VOLTAGE_2", 69: "INA260_PWR_BOARD_27V_CURRENT_1",
+            70: "INA260_PWR_BOARD_27V_CURRENT_2", 71: "INA260_PWR_BOARD_27V_POWER_1",
+            72: "INA260_PWR_BOARD_27V_POWER_2", 73: "INA260_CPLD_3V3_VOLTAGE_1",
+            74: "INA260_CPLD_3V3_VOLTAGE_2", 75: "INA260_CPLD_3V3_CURRENT_1",
+            76: "INA260_CPLD_3V3_CURRENT_2", 77: "INA260_CPLD_3V3_POWER_1",
+            78: "INA260_CPLD_3V3_POWER_2", 79: "TMP100_CPLD_TEMP",
             80: "TMP100_GPU_TEMP", 81: "TMP100_CARRIER_TEMP",
             82: "TMP100_PWR_REG_TEMP", 83: "TMP100_PWR_BOARD_TEMP",
             84: "TMP100_IGLOO2_TEMP", 85: "GPU_TEMP",
@@ -1293,9 +1326,9 @@ class UARTMonitor(QMainWindow):
         }
         
         # Reserved and UART Loopback
-        for i in range(94, 125):
+        for i in range(94, 127):
             names[i] = "RESERVED"
-        for i in range(125, 129):
+        for i in range(128, 132):
             names[i] = "UART_LOOPBACK"
         
         return names
