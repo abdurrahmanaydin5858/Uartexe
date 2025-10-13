@@ -11,12 +11,11 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QComboBox, QPushButton, QTableWidget, QTableWidgetItem, QLabel,
     QHeaderView, QGroupBox, QMessageBox, QRadioButton, QButtonGroup,
-    QScrollArea
+    QScrollArea,QGridLayout 
 )
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QColor, QFont, QPalette
 
-# Modern color scheme
 class AppStyle:
     # Dark theme colors
     BACKGROUND = "#1e1e1e"
@@ -24,7 +23,7 @@ class AppStyle:
     SURFACE_LIGHT = "#2d2d30"
     PRIMARY = "#0e639c"
     PRIMARY_DARK = "#094771"
-    SUCCESS = "#4caf50"
+    SUCCESS = "#39ae3d"
     ERROR = "#f44336"
     WARNING = "#ff9800"
     TEXT = "#cccccc"
@@ -32,7 +31,7 @@ class AppStyle:
     BORDER = "#3e3e42"
     
     # Status colors - Updated per feedback
-    STATUS_ENABLED = "#2e7d32"      # Green for enabled/OK
+    STATUS_ENABLED = "#39ae3d"     # Green for enabled/OK
     STATUS_DISABLED = "#c62828"     # Red for disabled/error
     STATUS_NEUTRAL = "#ffffff"      # White for neutral disabled
     STATUS_NA = "#666666"           # Gray for N/A
@@ -57,7 +56,7 @@ class AppStyle:
             }
             
             QGroupBox {
-                background-color: #1a1a1a;
+                background-color: #252526;
                 border: 2px solid #0e639c;
                 border-radius: 6px;
                 margin-top: 16px;
@@ -149,7 +148,7 @@ class AppStyle:
             
             QTableWidget {
                 background-color: #252526;
-                alternate-background-color: #2a2a2d;
+                alternate-background-color: #252526;;
                 border: 1px solid #3e3e42;
                 gridline-color: #3e3e42;
                 color: #cccccc;
@@ -158,6 +157,22 @@ class AppStyle:
             
             QTableWidget::item {
                 padding: 4px;
+            }
+
+            /* YENİ EKLENEN BLOK */
+            QHeaderView {
+                background-color: #2d2d30;
+            }
+            
+            QHeaderView::section {
+                background-color: #2d2d30;
+                color: #cccccc;
+                padding: 6px;
+                border: none;
+                border-right: 1px solid #3e3e42;
+                border-bottom: 2px solid #0e3d5c;
+                font-weight: bold;
+                font-size: 9px;
             }
             
             QHeaderView::section {
@@ -210,6 +225,7 @@ class AppStyle:
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
                 width: 0px;
             }
+
         """
 
 
@@ -217,10 +233,10 @@ class UARTMonitor(QMainWindow):
     """Main application window for UART monitoring"""
     
     # Constants
-    WINDOW_TITLE = "UART MONITORING INTERFACE"
+    WINDOW_TITLE = "KAANGES ETC TEST SW"
     WINDOW_WIDTH = 1800
     WINDOW_HEIGHT = 950
-    TIMER_INTERVAL = 100  # milliseconds
+    TIMER_INTERVAL = 100  # milliseconds (gelen verileri 100ms'de bir okur ve tabloyu günceller)
     PACKET_SIZE = 133
     DATA_SIZE = 128
     
@@ -287,7 +303,7 @@ class UARTMonitor(QMainWindow):
         for first_byte, second_byte in voltage_current_power_pairs:
             self.data_limits['min'][first_byte] = 0
             self.data_limits['max'][first_byte] = 255
-            # Second byte remains as 'N/A'
+
         
         # Temperature sensor indices (always green)
         self.temp_indices = [79, 80, 81, 82, 83, 84, 85]
@@ -327,7 +343,20 @@ class UARTMonitor(QMainWindow):
         scroll_area.setMinimumWidth(300)
         scroll_area.setMaximumWidth(350)
         
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                background-color: #1e1e1e;
+                border: none;
+            }
+        """)
+
         scroll_widget = QWidget()
+        # Scroll widget arka plan rengini ayarla
+        scroll_widget.setAutoFillBackground(True)
+        palette = scroll_widget.palette()
+        palette.setColor(QPalette.Window, QColor("#1e1e1e"))
+        scroll_widget.setPalette(palette)
+        
         right_side_layout = QVBoxLayout(scroll_widget)
         right_side_layout.setSpacing(8)
         right_side_layout.setContentsMargins(5, 5, 5, 5)
@@ -351,6 +380,7 @@ class UARTMonitor(QMainWindow):
         panel = QGroupBox("⚡ CONNECTION SETTINGS")
         layout = QHBoxLayout()
         layout.setSpacing(15)
+        
         
         # COM Port selection
         layout.addWidget(QLabel("PORT:"))
@@ -422,16 +452,51 @@ class UARTMonitor(QMainWindow):
             0: 30,   # Index
             1: 150,  # Signal name
             2: 40,   # Min
-            3: 45,   # Value
+            3: 40,   # Value
             4: 40,   # Max
-            5: 120   # Meaning
+            5: 150  # Meaning
         }
         
         for i in range(18):
             col_type = i % 6
             table.setColumnWidth(i, column_widths[col_type])
-        
+
+        header = table.horizontalHeader()
+        for i in range(18):
+                header.setSectionResizeMode(i, QHeaderView.Stretch)
+
+        # fixed columns
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.Fixed)
+        header.setSectionResizeMode(3, QHeaderView.Fixed)
+        header.setSectionResizeMode(4, QHeaderView.Fixed)
+        header.setSectionResizeMode(6, QHeaderView.Fixed)
+        header.setSectionResizeMode(8, QHeaderView.Fixed)
+        header.setSectionResizeMode(9, QHeaderView.Fixed)
+        header.setSectionResizeMode(10, QHeaderView.Fixed)
+        header.setSectionResizeMode(12, QHeaderView.Fixed)
+        header.setSectionResizeMode(14, QHeaderView.Fixed)
+        header.setSectionResizeMode(15, QHeaderView.Fixed)
+        header.setSectionResizeMode(16, QHeaderView.Fixed)
+         
+        # changing columns
+        header.setSectionResizeMode(1, QHeaderView.Stretch)   # SIGNAL
+        header.setSectionResizeMode(5, QHeaderView.Stretch)   # MEANING
+        header.setSectionResizeMode(7, QHeaderView.Stretch)   # SIGNAL
+        header.setSectionResizeMode(11, QHeaderView.Stretch)  # MEANING
+        header.setSectionResizeMode(13, QHeaderView.Stretch)  # SIGNAL
+        header.setSectionResizeMode(17, QHeaderView.Stretch)  # MEANING
+            
         self._populate_table(table)
+        
+        # '#' sütunlarını ortalama ve arka plan rengi ayarlama
+        for row in range(rows_per_column):
+            for col in [0, 6, 12]:  # '#' sütunları (0, 6, 12)
+                item = table.item(row, col)
+                if item:
+                    item.setTextAlignment(Qt.AlignCenter)
+                    item.setBackground(QColor("#224055"))  
+        
         table.setEditTriggers(QTableWidget.NoEditTriggers)
         
         return table
@@ -460,7 +525,7 @@ class UARTMonitor(QMainWindow):
                 
                 # Min value
                 min_val = self.data_limits['min'][i]
-                if min_val == 'N/A' or is_second_byte:
+                if min_val == 'N/A':
                     min_item = QTableWidgetItem("N/A")
                     min_item.setBackground(QColor(AppStyle.TABLE_NA))
                 else:
@@ -468,16 +533,15 @@ class UARTMonitor(QMainWindow):
                 table.setItem(row, base_col + 2, min_item)
                 
                 # Current value with color coding
+                
                 value_item = QTableWidgetItem("0")
-                if is_second_byte:
-                    value_item.setBackground(QColor(AppStyle.TABLE_NA))
-                else:
-                    value_item.setBackground(self._get_value_color(i, 0))
+            
+                value_item.setBackground(self._get_value_color(i, 0))
                 table.setItem(row, base_col + 3, value_item)
                 
                 # Max value
                 max_val = self.data_limits['max'][i]
-                if max_val == 'N/A' or is_second_byte:
+                if max_val == 'N/A':
                     max_item = QTableWidgetItem("N/A")
                     max_item.setBackground(QColor(AppStyle.TABLE_NA))
                 else:
@@ -485,11 +549,7 @@ class UARTMonitor(QMainWindow):
                 table.setItem(row, base_col + 4, max_item)
                 
                 # Meaning
-                if is_second_byte:
-                    meaning_item = QTableWidgetItem("N/A")
-                    meaning_item.setBackground(QColor(AppStyle.TABLE_NA))
-                else:
-                    meaning_item = QTableWidgetItem("N/A")
+                meaning_item = QTableWidgetItem("N/A")
                 table.setItem(row, base_col + 5, meaning_item)
     
     def _is_second_byte_of_pair(self, index):
@@ -521,15 +581,16 @@ class UARTMonitor(QMainWindow):
     def _create_status_panel(self):
         """Create the status indicator panel - Updated per feedback"""
         panel = QGroupBox("📊 STATUS INDICATORS")
-        panel.setMaximumWidth(320)
-        layout = QVBoxLayout()
+        panel.setMaximumWidth(350)
+
+        layout = QGridLayout()
         layout.setSpacing(6)
         
         self.status_buttons = []
         # Updated labels: SATA0, SATA1, GPU, PMON
         status_labels = ["SATA0", "SATA1", "GPU STATUS", "PMON STATUS"]
         
-        for label in status_labels:
+        for idx, label in enumerate(status_labels):
             # Set initial text based on button type
             if "PMON" in label:
                 initial_text = f"● {label}\nPOWER FAIL"
@@ -541,53 +602,32 @@ class UARTMonitor(QMainWindow):
             btn.setMinimumHeight(45)
             btn.setMaximumHeight(50)
             # Initial state depends on the type
-            if "PMON" in label:
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {AppStyle.STATUS_DISABLED};
-                        color: white;
-                        font-weight: bold;
-                        font-size: 9px;
-                        border-radius: 4px;
-                        text-align: left;
-                        padding-left: 10px;
-                    }}
-                """)
-            elif "GPU" in label:
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {AppStyle.STATUS_NEUTRAL};
-                        color: black;
-                        font-weight: bold;
-                        font-size: 9px;
-                        border-radius: 4px;
-                        text-align: left;
-                        padding-left: 10px;
-                    }}
-                """)
-            else:  # SATA0, SATA1
-                btn.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {AppStyle.STATUS_DISABLED};
-                        color: white;
-                        font-weight: bold;
-                        font-size: 9px;
-                        border-radius: 4px;
-                        text-align: left;
-                        padding-left: 10px;
-                    }}
-                """)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {AppStyle.STATUS_DISABLED};
+                    color: white;
+                    font-weight: bold;
+                    font-size: 11px;
+                    border-radius: 4px;
+                    text-align: left;
+                    padding-left: 10px;
+                }}
+            """)
+
             self.status_buttons.append(btn)
-            layout.addWidget(btn)
-        
+
+            row = idx // 2  # Satır: 0, 0, 1, 1
+            col = idx % 2   # Sütun: 0, 1, 0, 1
+            layout.addWidget(btn, row, col)
+
         panel.setLayout(layout)
         return panel
     
     def _create_disc_in_status(self):
         """Create DISC_IN_STATUS indicator - New feature"""
         panel = QGroupBox("📌 DISC_IN_STATUS")
-        panel.setMaximumWidth(320)
-        layout = QVBoxLayout()
+        panel.setMaximumWidth(350)
+        layout = QGridLayout()
         layout.setSpacing(5)
         
         self.disc_in_labels = []
@@ -598,7 +638,7 @@ class UARTMonitor(QMainWindow):
                     background-color: #2d2d30;
                     color: #cccccc;
                     font-weight: bold;
-                    font-size: 9px;
+                    font-size: 11px;
                     padding: 8px;
                     border-radius: 3px;
                 }
@@ -606,17 +646,23 @@ class UARTMonitor(QMainWindow):
             label.setMinimumHeight(28)
             label.setMaximumHeight(32)
             self.disc_in_labels.append(label)
-            layout.addWidget(label)
-        
+            
+            row = i // 2
+            col = i % 2
+            layout.addWidget(label, row, col)
+
+        layout.setColumnStretch(0, 1)
+        layout.setColumnStretch(1, 1)
         panel.setLayout(layout)
         return panel
     
     def _create_control_panel(self):
         """Create the control button panel"""
         panel = QGroupBox("CONTROL PANEL")
-        panel.setMaximumWidth(320)
+        panel.setMaximumWidth(350)
         main_layout = QVBoxLayout()
         main_layout.setSpacing(6)
+        panel.setAutoFillBackground(True)
         
         # DISC Type Selection
         main_layout.addWidget(self._create_disc_type_selector())
@@ -637,7 +683,7 @@ class UARTMonitor(QMainWindow):
     def _create_disc_type_selector(self):
         """Create DISC type selector - New feature"""
         group = QGroupBox("🔧 DISC TYPE")
-        layout = QVBoxLayout()
+        layout = QHBoxLayout()
         layout.setSpacing(4)
         
         self.disc_type_group = QButtonGroup()
@@ -645,12 +691,12 @@ class UARTMonitor(QMainWindow):
         # OPEN/GND (default)
         self.disc_gnd_radio = QRadioButton("OPEN/GND")
         self.disc_gnd_radio.setChecked(True)
-        self.disc_gnd_radio.setStyleSheet("font-size: 9px;")
+        self.disc_gnd_radio.setStyleSheet("font-size: 11px;")
         self.disc_gnd_radio.toggled.connect(lambda: self._set_disc_type("OPEN/GND"))
         
         # OPEN/28V
         self.disc_28v_radio = QRadioButton("OPEN/28V")
-        self.disc_28v_radio.setStyleSheet("font-size: 9px;")
+        self.disc_28v_radio.setStyleSheet("font-size: 11px;")
         self.disc_28v_radio.toggled.connect(lambda: self._set_disc_type("OPEN/28V"))
         
         self.disc_type_group.addButton(self.disc_gnd_radio)
@@ -671,20 +717,20 @@ class UARTMonitor(QMainWindow):
     def _create_disc_out_controls(self):
         """Create DISC OUT control buttons - Updated from TX"""
         group = QGroupBox("📤 DISC OUT CONTROL")
-        layout = QVBoxLayout()
+        layout = QGridLayout()
         layout.setSpacing(4)
         
         self.disc_out_buttons = []
         for i in range(4):
             btn = QPushButton(f"DISC OUT {i+1}\nDISABLED")
             btn.setCheckable(True)
-            btn.setMinimumHeight(36)
-            btn.setMaximumHeight(40)
+            btn.setMinimumHeight(40)
+            btn.setMaximumHeight(45)
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: {AppStyle.STATUS_NA};
                     color: white;
-                    font-size: 8px;
+                    font-size: 11px;
                     font-weight: 500;
                 }}
                 QPushButton:hover {{
@@ -696,7 +742,11 @@ class UARTMonitor(QMainWindow):
             """)
             btn.clicked.connect(lambda checked, b=btn, idx=i: self._toggle_disc_out_button(b, checked, idx))
             self.disc_out_buttons.append(btn)
-            layout.addWidget(btn)
+            
+
+            row = i // 2
+            col = i % 2
+            layout.addWidget(btn, row, col)
         
         group.setLayout(layout)
         return group
@@ -709,13 +759,13 @@ class UARTMonitor(QMainWindow):
         
         self.sata1_btn = QPushButton("ONLY SATA1\nZEROIZE ACTIVATE")
         self.sata1_btn.setMinimumHeight(36)
-        self.sata1_btn.setMaximumHeight(40)
+        self.sata1_btn.setMaximumHeight(50)
         self.sata1_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {AppStyle.STATUS_NEUTRAL};
                 color: black;
                 font-weight: 600;
-                font-size: 8px;
+                font-size: 11px;
             }}
             QPushButton:hover {{
                 background-color: #e0e0e0;
@@ -730,13 +780,13 @@ class UARTMonitor(QMainWindow):
         
         self.satas_btn = QPushButton("SATA0 && SATA1\nZEROIZE ACTIVATE")
         self.satas_btn.setMinimumHeight(36)
-        self.satas_btn.setMaximumHeight(40)
+        self.satas_btn.setMaximumHeight(50)
         self.satas_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {AppStyle.STATUS_NEUTRAL};
                 color: black;
                 font-weight: 600;
-                font-size: 8px;
+                font-size: 11px;
             }}
             QPushButton:hover {{
                 background-color: #e0e0e0;
@@ -755,7 +805,7 @@ class UARTMonitor(QMainWindow):
     def _create_led_controls(self):
         """Create LED2 control buttons - Updated"""
         group = QGroupBox("💡 LED2 CONTROL")
-        layout = QVBoxLayout()
+        layout = QHBoxLayout()
         layout.setSpacing(4)
         
         self.led_buttons = []
@@ -771,7 +821,7 @@ class UARTMonitor(QMainWindow):
                     background-color: {AppStyle.STATUS_NA};
                     color: {color};
                     font-weight: bold;
-                    font-size: 8px;
+                    font-size: 10px;
                     text-align: left;
                     padding-left: 10px;
                 }}
@@ -941,14 +991,16 @@ class UARTMonitor(QMainWindow):
     
     def _process_packet(self, packet):
         """Process received packet data"""
+        # Transfer the incoming packet data to the received_data list.
         for i in range(self.DATA_SIZE):
-            if i + 4 < len(packet):
-                self.received_data[i] = packet[i + 4]
+            if i < len(packet):
+                self.received_data[i] = packet[i]
         
+        # These functions will now be called with the correct data.
         self._update_table()
         self._update_status_buttons()
         self._update_disc_in_status()
-    
+        
     def _update_table(self):
         """Update table with new data"""
         rows_per_column = 43
@@ -956,27 +1008,38 @@ class UARTMonitor(QMainWindow):
         for i in range(self.DATA_SIZE):
             col_group = i // rows_per_column
             row = i % rows_per_column
-            
+            second_voltage_bytes = [26,33,40,47,54,61,67,73]
+            second_current_bytes = [28,35,42,49,56,63,69,75]
+            second_power_bytes   = [30,37,44,51,58,65,71,77]
             if col_group < 3:
                 base_col = col_group * 6
                 value = self.received_data[i]
-                
-                # Skip second bytes of pairs for value updates
-                if self._is_second_byte_of_pair(i):
-                    continue
-                
+                next_value = self.received_data[i+1]
+
                 # Update value
                 item = self.table_widget.item(row, base_col + 3)
                 if item:
-                    item.setText(str(value))
+                    item.setText(f"0x{value:02X}")
                     item.setBackground(self._get_value_color(i, value))
                 
                 # Update meaning
                 meaning_item = self.table_widget.item(row, base_col + 5)
                 if meaning_item:
-                    meaning_text = self._get_dynamic_meaning(i, value)
+                    if i in second_voltage_bytes:
+                        meaning_text = self._get_voltage_meaning((i), value, next_value)
+                    elif i in second_current_bytes:
+                        meaning_text = self._get_current_meaning((i), value, next_value)
+                    elif i in  second_power_bytes:
+                        meaning_text = self._get_power_meaning((i), value, next_value)
+                    else:
+                        meaning_text, is_error = self._get_dynamic_meaning(i, value)
+                        # Set background color based on the error status
+                        if is_error:
+                            meaning_item.setBackground(QColor(183, 28, 28))
                     meaning_item.setText(meaning_text)
-    
+                        
+                    
+        
     def _update_status_buttons(self):
         """Update status indicator buttons - Updated per feedback"""
         status_indices = [32, 39, 46, 25]  # SATA0, SATA1, GPU_12V, PMON
@@ -1037,7 +1100,7 @@ class UARTMonitor(QMainWindow):
                         btn.setText(f"● {label}\nDISABLED")
                         btn.setStyleSheet(f"""
                             QPushButton {{
-                                background-color: {AppStyle.STATUS_NEUTRAL};
+                                background-color: {AppStyle.STATUS_DISABLED};
                                 color: black;
                                 font-weight: bold;
                                 font-size: 9px;
@@ -1190,12 +1253,12 @@ class UARTMonitor(QMainWindow):
             11: "UART_STATUS", 12: "CPU_STATUS", 13: "HSN_STATUS",
             14: "SATA_STATUS", 15: "USB_STATUS", 16: "JTAG_STATUS",
             17: "GPU_STATUS_1", 18: "GPU_STATUS_2", 19: "HDMI_STATUS",
-            20: "DISC_IN_VALUES", 21: "DISC_DISCREPANCY_CHECK",
+            20: "DISC_IN_STATUS", 21: "DISC_DISCREPANCY_CHECK",
             22: "DISC_OUT_BIT_STATUS", 23: "DISC_OUT_LB_FAIL_STATUS",
-            24: "DISC_OUT_FAULT_STATUS", 25: "LTC4281_PMON_STATUS",
-            26: "LTC4281_PMON_VOLTAGE_1", 27: "LTC4281_PMON_VOLTAGE_2",
-            28: "LTC4281_PMON_CURRENT_1", 29: "LTC4281_PMON_CURRENT_2",
-            30: "LTC4281_PMON_POWER_1", 31: "LTC4281_PMON_POWER_2",
+            24: "DISC_OUT_FAULT_STATUS", 25: "LTC4281_CPU_12V_STATUS",
+            26: "LTC4281_CPU_VOLTAGE_1", 27: "LTC4281_CPU_VOLTAGE_2",
+            28: "LTC4281_CPU_CURRENT_1", 29: "LTC4281_CPU_CURRENT_2",
+            30: "LTC4281_CPU_POWER_1", 31: "LTC4281_CPU_POWER_2",
             32: "LTC4281_SATA0_STATUS", 33: "LTC4281_SATA0_VOLTAGE_1",
             34: "LTC4281_SATA0_VOLTAGE_2", 35: "LTC4281_SATA0_CURRENT_1",
             36: "LTC4281_SATA0_CURRENT_2", 37: "LTC4281_SATA0_POWER_1",
@@ -1216,10 +1279,10 @@ class UARTMonitor(QMainWindow):
             66: "LTC4281_GPU_5V_POWER_2", 67: "INA260_PWR_BOARD_VOLTAGE_1",
             68: "INA260_PWR_BOARD_VOLTAGE_2", 69: "INA260_PWR_BOARD_CURRENT_1",
             70: "INA260_PWR_BOARD_CURRENT_2", 71: "INA260_PWR_BOARD_POWER_1",
-            72: "INA260_PWR_BOARD_POWER_2", 73: "INA260_PMON_VOLTAGE_1",
-            74: "INA260_PMON_VOLTAGE_2", 75: "INA260_PMON_CURRENT_1",
-            76: "INA260_PMON_CURRENT_2", 77: "INA260_PMON_POWER_1",
-            78: "INA260_PMON_POWER_2", 79: "TMP100_CPLD_TEMP",
+            72: "INA260_PWR_BOARD_POWER_2", 73: "INA260_CPLD_VOLTAGE_1",
+            74: "INA260_CPLD_VOLTAGE_2", 75: "INA260_CPLD_CURRENT_1",
+            76: "INA260_CPLD_CURRENT_2", 77: "INA260_CPLD_POWER_1",
+            78: "INA260_CPLD_POWER_2", 79: "TMP100_CPLD_TEMP",
             80: "TMP100_GPU_TEMP", 81: "TMP100_CARRIER_TEMP",
             82: "TMP100_PWR_REG_TEMP", 83: "TMP100_PWR_BOARD_TEMP",
             84: "TMP100_IGLOO2_TEMP", 85: "GPU_TEMP",
@@ -1239,28 +1302,107 @@ class UARTMonitor(QMainWindow):
     
     def _get_dynamic_meaning(self, index, value):
         """
-        Get dynamic meaning based on received value.
-        Customize this function to decode status bits and provide meaningful descriptions.
+        Get dynamic meaning based on the received value.
+        This function is customized to show different interpretations based on the data index.
         """
-        # Temperature sensors
-        if index in self.temp_indices:
-            return f"{value}°C"
+        # Show data for specified indices in 8-bit binary format.
+        binary_indices = list(range(6, 26)) + [32, 39, 46, 53, 60]
+        if index in binary_indices:
+            is_error = False  
+            
+            # Check if only a single bit is set to 1 (indicates an error/status).
+            if index == 10:
+                if (value & 0x3F) != 0:
+                    is_error = True
+            elif index == 21:
+                if (value & 0x1F) != 0:
+                    is_error = True
+            elif index in [14, 23]:
+                if (value & 0x0F) != 0:
+                    is_error = True
+            elif index == 15:
+                if (value & 0x07) != 0:
+                    is_error = True
+            elif index in [11, 12, 13, 16, 18, 19]:
+                if (value & 0x01) != 0:
+                    is_error = True
+            else:
+                is_error = (value != 0)        
+            
+            # Format the binary string with spaces between bits for readability.
+            binary_string = f"{value:08b}"
+            spaced_binary_string = ' '.join(binary_string)
+            
+            # Return the formatted text and the error status as a tuple.
+            return (f"0b {spaced_binary_string}", is_error)
         
-        # Status registers
-        if index in [25, 32, 39, 46, 53, 60]:  # LTC4281 STATUS registers
-            status_bits = []
-            if value & 0x80: status_bits.append("ON")
-            if value & 0x40: status_bits.append("COOLDOWN")
-            if value & 0x20: status_bits.append("SHORT")
-            if value & 0x10: status_bits.append("ON_PIN")
-            if value & 0x08: status_bits.append("PGOOD")
-            if value & 0x04: status_bits.append("OC_COOL")
-            if value & 0x02: status_bits.append("UV")
-            if value & 0x01: status_bits.append("OV")
-            return ", ".join(status_bits) if status_bits else "NORMAL"
-        
-        return "N/A"
+        return ("N/A", False)
 
+
+    def _get_voltage_meaning(self, index, msb_value, lsb_value):
+        """
+        Calculates the voltage from MSB and LSB values and updates the table item.
+        """
+        # 1. Combine MSB and LSB to get a 16-bit value
+        combined_value = (msb_value << 8) | lsb_value
+
+        # 2. Apply the specific voltage scaling factor
+        if index in [26, 47]:  # LTC4281 12V mode 
+            voltage_value = combined_value * (0.254e-3)
+            return f"{voltage_value:.3f} V"
+        elif index in [33, 40, 61]:  # LTC4281 3v3 mode 
+            voltage_value = combined_value * (0.0847e-3)
+            return f"{voltage_value:.3f} V"
+        elif index in [54]:  # LTC4281 5v mode 
+            voltage_value = combined_value * (0.127e-3)
+            return f"{voltage_value:.3f} V"
+        elif index in [67, 73]:  # INA260 mode
+            voltage_value = combined_value * (1.25e-3)
+            return f"{voltage_value:.3f} V"
+        else:
+            return "N/A"
+
+
+    def _get_current_meaning(self, index, msb_value, lsb_value):
+        """
+        Calculates the current from MSB and LSB values and updates the table item.
+        """
+        # 1. Combine MSB and LSB to get a 16-bit value
+        combined_value = (msb_value << 8) | lsb_value
+
+        # 2. Apply the specific current scaling factor
+        if index in [28, 35, 42, 49, 56, 63]:  # LTC4281 mode 
+            current_value = combined_value * (0.305e-3)
+            return f"{current_value:.3f} A"
+        elif index in [69, 75]:  # INA260 mode
+            current_value = combined_value * (1.25e-3)
+            return f"{current_value:.3f} A"  
+        else:
+            return "N/A"
+
+
+    def _get_power_meaning(self, index, msb_value, lsb_value):
+        """
+        Calculates the power from MSB and LSB values and updates the table item.
+        """
+        # 1. Combine MSB and LSB to get a 16-bit value
+        combined_value = (msb_value << 8) | lsb_value
+
+        # 2. Apply the specific power scaling factor
+        if index in [30, 51]:  # LTC4281 12V mode 
+            power_value = combined_value * (5.08e-3)
+            return f"{power_value:.3f} W"
+        elif index in [37, 44, 65]:  # LTC4281 3V3 V mode 
+            power_value = combined_value * (1.69e-3)
+            return f"{power_value:.3f} W"
+        elif index in [58]:  # LTC4281 5V mode 
+            power_value = combined_value * (2.54e-3)
+            return f"{power_value:.3f} W"
+        elif index in [71, 77]:  # INA260 mode
+            power_value = combined_value * (10e-3)
+            return f"{power_value:.3f} W"
+        else:
+            return "N/A"
 
 def main():
     """Application entry point"""
