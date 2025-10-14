@@ -559,7 +559,7 @@ class UARTMonitor(QMainWindow):
                     min_item = QTableWidgetItem("N/A")
                     min_item.setBackground(QColor(AppStyle.TABLE_NA))
                 else:
-                    min_item = QTableWidgetItem(f"0x{min_val:02X}")
+                    min_item = QTableWidgetItem(str(min_val))
                 table.setItem(row, base_col + 2, min_item)
                 
                 # Current value with color coding
