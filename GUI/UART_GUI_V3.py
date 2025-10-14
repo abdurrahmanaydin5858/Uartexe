@@ -236,7 +236,7 @@ class UARTMonitor(QMainWindow):
     WINDOW_TITLE = "KAANGES ETC TEST SW"
     WINDOW_WIDTH = 1800
     WINDOW_HEIGHT = 950
-    TIMER_INTERVAL = 100  # milliseconds (gelen verileri 100ms'de bir okur ve tabloyu günceller)
+    TIMER_INTERVAL = 1000 
     PACKET_SIZE = 133
     DATA_SIZE = 132
     
@@ -253,6 +253,7 @@ class UARTMonitor(QMainWindow):
         self.received_data = [0] * self.PACKET_SIZE
         self.disc_type = "OPEN/GND"  # Default disc type
         self.sata_command_to_send = (0, 0)
+        self.read_buffer = bytearray()
         self._init_data_limits()
         self._init_ui()
         self._init_timer()
@@ -602,12 +603,17 @@ class UARTMonitor(QMainWindow):
         max_val = self.data_limits['max'][index]
         
         # N/A values
-        if min_val == 'N/A' or max_val == 'N/A':
+        if min_val == 'N/A' and max_val == 'N/A':
             return QColor(66, 66, 66)  # Gray for N/A
         
-        # Valid range - green
-        if min_val <= value <= max_val:
+        if min_val == 'N/A' and value <= max_val:
             return QColor(27, 94, 32)
+        # Valid range - green
+        elif min_val <= value <= max_val:
+            return QColor(27, 94, 32)
+        
+        # Valid range - green
+        
         
         # Out of range - red (error)
         return QColor(183, 28, 28)
@@ -1047,24 +1053,59 @@ class UARTMonitor(QMainWindow):
         self.status_label.setStyleSheet(f"color: {AppStyle.ERROR}; font-weight: bold; font-size: 11px;")
     
     def _read_uart_data(self):
-        """Read and process UART data"""
+        """Read and process UART data with proper buffering"""
         if not self.serial_port or not self.serial_port.is_open:
             return
         
         try:
+            # Gelen tüm veriyi buffer'a ekle
             if self.serial_port.in_waiting > 0:
-                data = self.serial_port.read(self.serial_port.in_waiting)
+                new_data = self.serial_port.read(self.serial_port.in_waiting)
+                self.read_buffer.extend(new_data)
+            
+            # Buffer'da yeterli veri var mı kontrol et
+            while len(self.read_buffer) >= self.PACKET_SIZE:
+                # Header'ları ara
+                header_found = False
                 
-                if len(data) >= self.PACKET_SIZE:
-                    for i in range(len(data) - self.PACKET_SIZE + 1):
-                        if data[i] == self.HEADER_1 and data[i+1] == self.HEADER_2:
-                            packet = data[i:i+self.PACKET_SIZE]
-                            if self._validate_packet(packet):
-                                self._process_packet(packet)
-                                break
+                for i in range(len(self.read_buffer) - self.PACKET_SIZE + 1):
+                    # Header kontrolü
+                    if (self.read_buffer[i] == self.HEADER_1 and 
+                        self.read_buffer[i+1] == self.HEADER_2):
+                        
+                        # Tam bir paket çıkar
+                        packet = bytes(self.read_buffer[i:i+self.PACKET_SIZE])
+                        
+                        # Paketi doğrula
+                        if self._validate_packet(packet):
+                            # Geçerli paket bulundu
+                            self._process_packet(packet)
+                            
+                            # İşlenen veriyi buffer'dan sil
+                            self.read_buffer = self.read_buffer[i+self.PACKET_SIZE:]
+                            header_found = True
+                            break
+                        else:
+                            # Checksum hatalı, bir sonraki byte'dan devam et
+                            continue
+                
+                # Header bulunamadıysa buffer'ı temizle
+                if not header_found:
+                    # İlk byte'ı at ve tekrar dene
+                    if len(self.read_buffer) > 0:
+                        self.read_buffer.pop(0)
+                    else:
+                        break
+                
+            # Buffer çok büyüdüyse temizle (güvenlik önlemi)
+            if len(self.read_buffer) > self.PACKET_SIZE * 3:
+                print("Buffer overflow, temizleniyor...")
+                self.read_buffer.clear()
+                
         except Exception as e:
             print(f"Read error: {e}")
-    
+            self.read_buffer.clear()
+        
     def _validate_packet(self, packet):
         """
         Validates the packet using the Two's Complement checksum method.
@@ -1130,6 +1171,12 @@ class UARTMonitor(QMainWindow):
                         meaning_text, power_value = self._get_power_meaning((i), value, next_value)
                         item.setBackground(self._get_value_color(i, power_value))
                         meaning_item.setBackground(self._get_value_color(i, power_value))
+                    elif i in self.temp_indices:
+                        # Two's Complement dönüşümü
+                        Twos_Complement_value = value if value < 128 else value - 256
+                        meaning_text = f"{Twos_Complement_value}°C" 
+                        item.setBackground(self._get_value_color(i, Twos_Complement_value))
+                        meaning_item.setBackground(self._get_value_color(i, Twos_Complement_value))
                     else:
                         item.setBackground(self._get_value_color(i, value))
                         meaning_item.setBackground(self._get_value_color(i, value))
@@ -1419,20 +1466,25 @@ class UARTMonitor(QMainWindow):
         """
         # 1. Combine MSB and LSB to get a 16-bit value
         combined_value = (msb_value << 8) | lsb_value
-        
+
+        # 2. Two's Complement dönüşümü (16-bit için)
+        if combined_value > 32767:  # Negatif sayı
+            Twos_Complement_value = combined_value - 65536
+        else:  # Pozitif sayı
+            Twos_Complement_value = combined_value    
 
         # 2. Apply the specific voltage scaling factor
         if index in [26, 47]:  # LTC4281 12V mode 
-            voltage_value = combined_value * (0.254e-3)
+            voltage_value = Twos_Complement_value * (0.254e-3)
             return f"{voltage_value:.3f} V", voltage_value
         elif index in [33, 40, 61]:  # LTC4281 3v3 mode 
-            voltage_value = combined_value * (0.0847e-3)
+            voltage_value = Twos_Complement_value * (0.0847e-3)
             return f"{voltage_value:.3f} V", voltage_value
         elif index in [54]:  # LTC4281 5v mode 
-            voltage_value = combined_value * (0.127e-3)
+            voltage_value = Twos_Complement_value * (0.127e-3)
             return f"{voltage_value:.3f} V", voltage_value
         elif index in [67, 73]:  # INA260 mode
-            voltage_value = combined_value * (1.25e-3)
+            voltage_value = Twos_Complement_value * (1.25e-3)
             return f"{voltage_value:.3f} V", voltage_value
         else:
             return "N/A"
@@ -1445,12 +1497,18 @@ class UARTMonitor(QMainWindow):
         # 1. Combine MSB and LSB to get a 16-bit value
         combined_value = (msb_value << 8) | lsb_value
 
+        # 2. Two's Complement dönüşümü (16-bit için)
+        if combined_value > 32767:  # Negatif sayı
+            Twos_Complement_value = combined_value - 65536
+        else:  # Pozitif sayı
+            Twos_Complement_value = combined_value 
+
         # 2. Apply the specific current scaling factor
         if index in [28, 35, 42, 49, 56, 63]:  # LTC4281 mode 
-            current_value = combined_value * (0.305e-3)
+            current_value = Twos_Complement_value * (0.305e-3)
             return f"{current_value:.3f} A", current_value
         elif index in [69, 75]:  # INA260 mode
-            current_value = combined_value * (1.25e-3)
+            current_value = Twos_Complement_value * (1.25e-3)
             return f"{current_value:.3f} A", current_value
         else:
             return "N/A"
@@ -1463,18 +1521,24 @@ class UARTMonitor(QMainWindow):
         # 1. Combine MSB and LSB to get a 16-bit value
         combined_value = (msb_value << 8) | lsb_value
 
+        # 2. Two's Complement dönüşümü (16-bit için)
+        if combined_value > 32767:  # Negatif sayı
+            Twos_Complement_value = combined_value - 65536
+        else:  # Pozitif sayı
+            Twos_Complement_value = combined_value 
+
         # 2. Apply the specific power scaling factor
         if index in [30, 51]:  # LTC4281 12V mode 
-            power_value = combined_value * (5.08e-3)
+            power_value = Twos_Complement_value * (5.08e-3)
             return f"{power_value:.3f} W", power_value
         elif index in [37, 44, 65]:  # LTC4281 3V3 V mode 
-            power_value = combined_value * (1.69e-3)
+            power_value = Twos_Complement_value * (1.69e-3)
             return f"{power_value:.3f} W", power_value
         elif index in [58]:  # LTC4281 5V mode 
-            power_value = combined_value * (2.54e-3)
+            power_value = Twos_Complement_value * (2.54e-3)
             return f"{power_value:.3f} W", power_value
         elif index in [71, 77]:  # INA260 mode
-            power_value = combined_value * (10e-3)
+            power_value = Twos_Complement_value * (10e-3)
             return f"{power_value:.3f} W", power_value
         else:
             return "N/A"
