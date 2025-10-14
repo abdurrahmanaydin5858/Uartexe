@@ -273,36 +273,66 @@ class UARTMonitor(QMainWindow):
         # 2-byte measurement pairs - only first byte has limits
         # Second byte is marked as N/A (will be grayed out)
         voltage_current_power_pairs = [
-            (26, 27),   # LTC4281_PMON_VOLTAGE
-            (28, 29),   # LTC4281_PMON_CURRENT
-            (30, 31),   # LTC4281_PMON_POWER
-            (33, 34),   # LTC4281_SATA0_VOLTAGE
-            (35, 36),   # LTC4281_SATA0_CURRENT
-            (37, 38),   # LTC4281_SATA0_POWER
-            (40, 41),   # LTC4281_SATA1_VOLTAGE
-            (42, 43),   # LTC4281_SATA1_CURRENT
-            (44, 45),   # LTC4281_SATA1_POWER
+            (26, 27),   # LTC4281_CPU_12_VOLTAGE
+            (28, 29),   # LTC4281_CPU_12_CURRENT
+            (30, 31),   # LTC4281_CPU_12_POWER
+            (33, 34),   # LTC4281_SATA0_3V3_VOLTAGE
+            (35, 36),   # LTC4281_SATA0_3V3_CURRENT
+            (37, 38),   # LTC4281_SATA0_3V3_POWER
+            (40, 41),   # LTC4281_SATA1_3V3_VOLTAGE
+            (42, 43),   # LTC4281_SATA1_3V3_CURRENT
+            (44, 45),   # LTC4281_SATA1_3V3_POWER
             (47, 48),   # LTC4281_GPU_12V_VOLTAGE
             (49, 50),   # LTC4281_GPU_12V_CURRENT
             (51, 52),   # LTC4281_GPU_12V_POWER
-            (54, 55),   # LTC4281_GPU_3V3_VOLTAGE
-            (56, 57),   # LTC4281_GPU_3V3_CURRENT
-            (58, 59),   # LTC4281_GPU_3V3_POWER
-            (61, 62),   # LTC4281_GPU_5V_VOLTAGE
-            (63, 64),   # LTC4281_GPU_5V_CURRENT
-            (65, 66),   # LTC4281_GPU_5V_POWER
-            (67, 68),   # INA260_PWR_BOARD_VOLTAGE
-            (69, 70),   # INA260_PWR_BOARD_CURRENT
-            (71, 72),   # INA260_PWR_BOARD_POWER
-            (73, 74),   # INA260_PMON_VOLTAGE
-            (75, 76),   # INA260_PMON_CURRENT
-            (77, 78),   # INA260_PMON_POWER
+            (54, 55),   # LTC4281_GPU_5V_VOLTAGE
+            (56, 57),   # LTC4281_GPU_5V_CURRENT
+            (58, 59),   # LTC4281_GPU_5V_POWER
+            (61, 62),   # LTC4281_GPU_3V3_VOLTAGE
+            (63, 64),   # LTC4281_GPU_3V3_CURRENT
+            (65, 66),   # LTC4281_GPU_3V3_POWER
+            (67, 68),   # INA260_PWR_BOARD_24V_VOLTAGE
+            (69, 70),   # INA260_PWR_BOARD_24V_CURRENT
+            (71, 72),   # INA260_PWR_BOARD_24V_POWER
+            (73, 74),   # INA260_PMON_3V3_VOLTAGE
+            (75, 76),   # INA260_PMON_3V3_CURRENT
+            (77, 78),   # INA260_PMON_3V3_POWER
         ]
         
         # Set limits for first byte of each pair
         for first_byte, second_byte in voltage_current_power_pairs:
             self.data_limits['min'][first_byte] = 0
             self.data_limits['max'][first_byte] = 255
+
+            # 2. Apply the specific voltage limit values
+            if first_byte in [26, 47]:   
+                self.data_limits['min'][first_byte] = 10.8
+                self.data_limits['max'][first_byte] = 13.2
+            elif first_byte in [33, 40, 61, 73]:  
+                self.data_limits['min'][first_byte] = 2.97
+                self.data_limits['max'][first_byte] = 3.63
+            elif first_byte in [54]:  
+                self.data_limits['min'][first_byte] = 4.5
+                self.data_limits['max'][first_byte] = 5.5
+            elif first_byte in [67]: 
+                self.data_limits['min'][first_byte] = 21.6
+                self.data_limits['max'][first_byte] = 26.4
+
+            # 2. Apply the specific current limit values
+            elif first_byte in [28, 49]:  
+                self.data_limits['min'][first_byte] = "N/A"
+                self.data_limits['max'][first_byte] = 4
+            elif first_byte in [75]:  
+                self.data_limits['min'][first_byte] = "N/A"
+                self.data_limits['max'][first_byte] = 1 
+            elif first_byte in [35, 42]:  
+                self.data_limits['min'][first_byte] = "N/A"
+                self.data_limits['max'][first_byte] = 3 
+            elif first_byte in [63, 56]:  
+                self.data_limits['min'][first_byte] = "N/A"
+                self.data_limits['max'][first_byte] = 2 
+            
+
 
         
         # Temperature sensor indices (always green)
@@ -545,7 +575,7 @@ class UARTMonitor(QMainWindow):
                     max_item = QTableWidgetItem("N/A")
                     max_item.setBackground(QColor(AppStyle.TABLE_NA))
                 else:
-                    max_item = QTableWidgetItem(f"0x{max_val:02X}")
+                    max_item = QTableWidgetItem(str(max_val))
                 table.setItem(row, base_col + 4, max_item)
                 
                 # Meaning
@@ -562,7 +592,11 @@ class UARTMonitor(QMainWindow):
         """Determine the appropriate color for a value"""
         # Temperature sensors - always green
         if index in self.temp_indices:
-            return QColor(27, 94, 32)
+            # Valid range - green
+            if -45 <= value <= 105:
+                return QColor(27, 94, 32)
+            else:
+                return QColor(183, 28, 28)
         
         min_val = self.data_limits['min'][index]
         max_val = self.data_limits['max'][index]
@@ -1080,18 +1114,25 @@ class UARTMonitor(QMainWindow):
                 meaning_item = self.table_widget.item(row, base_col + 5)
                 if item:
                     item.setText(f"0x{value:02X}")
-                    item.setBackground(self._get_value_color(i, value))
-                    meaning_item.setBackground(self._get_value_color(i, value))
+                    
                 
                 
                 if meaning_item:
                     if i in second_voltage_bytes:
-                        meaning_text = self._get_voltage_meaning((i), value, next_value)
+                        meaning_text, voltage_value = self._get_voltage_meaning((i), value, next_value)
+                        item.setBackground(self._get_value_color(i, voltage_value))
+                        meaning_item.setBackground(self._get_value_color(i, voltage_value))
                     elif i in second_current_bytes:
-                        meaning_text = self._get_current_meaning((i), value, next_value)
+                        meaning_text, current_value = self._get_current_meaning((i), value, next_value)
+                        item.setBackground(self._get_value_color(i, current_value))
+                        meaning_item.setBackground(self._get_value_color(i, current_value))
                     elif i in  second_power_bytes:
-                        meaning_text = self._get_power_meaning((i), value, next_value)
+                        meaning_text, power_value = self._get_power_meaning((i), value, next_value)
+                        item.setBackground(self._get_value_color(i, power_value))
+                        meaning_item.setBackground(self._get_value_color(i, power_value))
                     else:
+                        item.setBackground(self._get_value_color(i, value))
+                        meaning_item.setBackground(self._get_value_color(i, value))
                         meaning_text, is_error = self._get_dynamic_meaning(i, value)
                         # Set background color based on the error status
                         if is_error:
@@ -1378,20 +1419,21 @@ class UARTMonitor(QMainWindow):
         """
         # 1. Combine MSB and LSB to get a 16-bit value
         combined_value = (msb_value << 8) | lsb_value
+        
 
         # 2. Apply the specific voltage scaling factor
         if index in [26, 47]:  # LTC4281 12V mode 
             voltage_value = combined_value * (0.254e-3)
-            return f"{voltage_value:.3f} V"
+            return f"{voltage_value:.3f} V", voltage_value
         elif index in [33, 40, 61]:  # LTC4281 3v3 mode 
             voltage_value = combined_value * (0.0847e-3)
-            return f"{voltage_value:.3f} V"
+            return f"{voltage_value:.3f} V", voltage_value
         elif index in [54]:  # LTC4281 5v mode 
             voltage_value = combined_value * (0.127e-3)
-            return f"{voltage_value:.3f} V"
+            return f"{voltage_value:.3f} V", voltage_value
         elif index in [67, 73]:  # INA260 mode
             voltage_value = combined_value * (1.25e-3)
-            return f"{voltage_value:.3f} V"
+            return f"{voltage_value:.3f} V", voltage_value
         else:
             return "N/A"
 
@@ -1406,10 +1448,10 @@ class UARTMonitor(QMainWindow):
         # 2. Apply the specific current scaling factor
         if index in [28, 35, 42, 49, 56, 63]:  # LTC4281 mode 
             current_value = combined_value * (0.305e-3)
-            return f"{current_value:.3f} A"
+            return f"{current_value:.3f} A", current_value
         elif index in [69, 75]:  # INA260 mode
             current_value = combined_value * (1.25e-3)
-            return f"{current_value:.3f} A"  
+            return f"{current_value:.3f} A", current_value
         else:
             return "N/A"
 
@@ -1424,16 +1466,16 @@ class UARTMonitor(QMainWindow):
         # 2. Apply the specific power scaling factor
         if index in [30, 51]:  # LTC4281 12V mode 
             power_value = combined_value * (5.08e-3)
-            return f"{power_value:.3f} W"
+            return f"{power_value:.3f} W", power_value
         elif index in [37, 44, 65]:  # LTC4281 3V3 V mode 
             power_value = combined_value * (1.69e-3)
-            return f"{power_value:.3f} W"
+            return f"{power_value:.3f} W", power_value
         elif index in [58]:  # LTC4281 5V mode 
             power_value = combined_value * (2.54e-3)
-            return f"{power_value:.3f} W"
+            return f"{power_value:.3f} W", power_value
         elif index in [71, 77]:  # INA260 mode
             power_value = combined_value * (10e-3)
-            return f"{power_value:.3f} W"
+            return f"{power_value:.3f} W", power_value
         else:
             return "N/A"
 
