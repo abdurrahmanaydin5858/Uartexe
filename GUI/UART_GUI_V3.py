@@ -606,15 +606,15 @@ class UARTMonitor(QMainWindow):
         if min_val == 'N/A' and max_val == 'N/A':
             return QColor(66, 66, 66)  # Gray for N/A
         
-        if min_val == 'N/A' and value <= max_val:
-            return QColor(27, 94, 32)
+        elif min_val == 'N/A' and max_val != 'N/A':
+            if value <= max_val:
+                return QColor(27, 94, 32)
+            else:
+                return QColor(183, 28, 28)
         # Valid range - green
         elif min_val <= value <= max_val:
             return QColor(27, 94, 32)
-        
-        # Valid range - green
-        
-        
+
         # Out of range - red (error)
         return QColor(183, 28, 28)
     
@@ -1132,6 +1132,8 @@ class UARTMonitor(QMainWindow):
         self._update_table()
         self._update_status_buttons()
         self._update_disc_in_status()
+
+
         
     def _update_table(self):
         """Update table with new data"""
@@ -1299,6 +1301,7 @@ class UARTMonitor(QMainWindow):
             if self.disc_type == "OPEN/GND":
                 status_text = "GND" if bit_value else "OPEN"
             else:  # OPEN/28V
+                bit_value = (disc_in_value >> i) & 0x10
                 status_text = "28V" if bit_value else "OPEN"
             
             self.disc_in_labels[i].setText(f"DISC_IN_{i}: {status_text}")
@@ -1447,8 +1450,11 @@ class UARTMonitor(QMainWindow):
             elif index in [11, 12, 13, 16, 18, 19]:
                 if (value & 0x01) != 0:
                     is_error = True
+            elif index in [6,7,8,9,17,20,22,24]:
+                is_error = (value != 0)
             else:
-                is_error = (value != 0)        
+                if (value & 0x80) != 0:
+                    is_error = True        
             
             # Format the binary string with spaces between bits for readability.
             binary_string = f"{value:08b}"
