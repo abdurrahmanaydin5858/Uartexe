@@ -1450,11 +1450,8 @@ class UARTMonitor(QMainWindow):
             elif index in [11, 12, 13, 16, 18, 19]:
                 if (value & 0x01) != 0:
                     is_error = True
-            elif index in [6,7,8,9,17,20,22,24]:
-                is_error = (value != 0)
-            else:
-                if (value & 0x80) != 0:
-                    is_error = True        
+            elif index in [6,7,8,9,17,24]:
+                is_error = (value != 0)      
             
             # Format the binary string with spaces between bits for readability.
             binary_string = f"{value:08b}"
