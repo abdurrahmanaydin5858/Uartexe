@@ -271,6 +271,7 @@ class UARTMonitor(QMainWindow):
         self._set_fixed_limits(2, self.PACKET_LENGTH) # LENGTH
         self._set_fixed_limits(3, self.PACKET_ID)     # PACKET_ID
         
+        
         # 2-byte measurement pairs - only first byte has limits
         # Second byte is marked as N/A (will be grayed out)
         voltage_current_power_pairs = [
@@ -560,7 +561,10 @@ class UARTMonitor(QMainWindow):
                     min_item = QTableWidgetItem("N/A")
                     min_item.setBackground(QColor(AppStyle.TABLE_NA))
                 else:
-                    min_item = QTableWidgetItem(str(min_val))
+                    if i <=3 :
+                        min_item = QTableWidgetItem(f"0x{min_val:02X}")
+                    else:
+                        min_item = QTableWidgetItem(str(min_val))
                 table.setItem(row, base_col + 2, min_item)
                 
                 # Current value with color coding
@@ -576,7 +580,10 @@ class UARTMonitor(QMainWindow):
                     max_item = QTableWidgetItem("N/A")
                     max_item.setBackground(QColor(AppStyle.TABLE_NA))
                 else:
-                    max_item = QTableWidgetItem(str(max_val))
+                    if i <=3 :
+                        max_item = QTableWidgetItem(f"0x{max_val:02X}")
+                    else:
+                        max_item = QTableWidgetItem(str(max_val))
                 table.setItem(row, base_col + 4, max_item)
                 
                 # Meaning
@@ -1213,7 +1220,7 @@ class UARTMonitor(QMainWindow):
                                 background-color: {AppStyle.STATUS_ENABLED};
                                 color: white;
                                 font-weight: bold;
-                                font-size: 9px;
+                                font-size: 11px;
                                 border-radius: 4px;
                                 text-align: left;
                                 padding-left: 10px;
@@ -1226,7 +1233,7 @@ class UARTMonitor(QMainWindow):
                                 background-color: {AppStyle.STATUS_DISABLED};
                                 color: white;
                                 font-weight: bold;
-                                font-size: 9px;
+                                font-size: 11px;
                                 border-radius: 4px;
                                 text-align: left;
                                 padding-left: 10px;
@@ -1242,7 +1249,7 @@ class UARTMonitor(QMainWindow):
                                 background-color: {AppStyle.STATUS_ENABLED};
                                 color: white;
                                 font-weight: bold;
-                                font-size: 9px;
+                                font-size: 11px;
                                 border-radius: 4px;
                                 text-align: left;
                                 padding-left: 10px;
@@ -1255,7 +1262,7 @@ class UARTMonitor(QMainWindow):
                                 background-color: {AppStyle.STATUS_DISABLED};
                                 color: black;
                                 font-weight: bold;
-                                font-size: 9px;
+                                font-size: 11px;
                                 border-radius: 4px;
                                 text-align: left;
                                 padding-left: 10px;
@@ -1271,7 +1278,7 @@ class UARTMonitor(QMainWindow):
                                 background-color: {AppStyle.STATUS_ENABLED};
                                 color: white;
                                 font-weight: bold;
-                                font-size: 9px;
+                                font-size: 11px;
                                 border-radius: 4px;
                                 text-align: left;
                                 padding-left: 10px;
@@ -1284,7 +1291,7 @@ class UARTMonitor(QMainWindow):
                                 background-color: {AppStyle.STATUS_DISABLED};
                                 color: white;
                                 font-weight: bold;
-                                font-size: 9px;
+                                font-size: 11px;
                                 border-radius: 4px;
                                 text-align: left;
                                 padding-left: 10px;
@@ -1319,7 +1326,7 @@ class UARTMonitor(QMainWindow):
                     background-color: {AppStyle.SUCCESS};
                     color: white;
                     font-weight: bold;
-                    font-size: 8px;
+                    font-size: 11px;
                 }}
             """)
         else:
@@ -1329,7 +1336,7 @@ class UARTMonitor(QMainWindow):
                     background-color: {AppStyle.STATUS_NA};
                     color: white;
                     font-weight: bold;
-                    font-size: 8px;
+                    font-size: 11px;
                 }}
             """)
         self._build_and_send_command_packet()
@@ -1347,7 +1354,7 @@ class UARTMonitor(QMainWindow):
                     background-color: {AppStyle.SUCCESS};
                     color: white;
                     font-weight: bold;
-                    font-size: 8px;
+                    font-size: 11px;
                     text-align: left;
                     padding-left: 10px;
                 }}
@@ -1359,7 +1366,7 @@ class UARTMonitor(QMainWindow):
                     background-color: {AppStyle.STATUS_NA};
                     color: {color};
                     font-weight: bold;
-                    font-size: 8px;
+                    font-size: 11px;
                     text-align: left;
                     padding-left: 10px;
                 }}
