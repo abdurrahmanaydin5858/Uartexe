@@ -236,7 +236,7 @@ class UARTMonitor(QMainWindow):
     WINDOW_TITLE = "KAANGES ETC TEST SW"
     WINDOW_WIDTH = 1800
     WINDOW_HEIGHT = 950
-    TIMER_INTERVAL = 1000 
+    TIMER_INTERVAL = 100 
     PACKET_SIZE = 133
     DATA_SIZE = 132
     
@@ -947,6 +947,7 @@ class UARTMonitor(QMainWindow):
         command_packet[1] = self.HEADER_2
         command_packet[2] = 37  # Packet length
         command_packet[3] = 0x01 # ID
+        command_packet[36] = 0xAA # ID
 
         # Byte 4: Sense Select
         if self.disc_type == "OPEN/28V":
@@ -980,8 +981,13 @@ class UARTMonitor(QMainWindow):
         # Bytes 10-35 are already 0 (Reserved)
 
         # Byte 36: Checksum
-        # Calculate checksum over the first 36 data bytes.
-        checksum = (256 - (sum(command_packet[0:36]) % 256)) % 256
+        # İlk 36 baytın (indeks 0'dan 35'e kadar) toplamını hesapla.
+        data_sum = sum(command_packet[0:36])
+        
+        # İki'nin tümleyeni checksum'ını hesapla.
+        # (-data_sum) negatif bir sayı üretir.
+        # & 0xFF ise bu sayının 8-bit'lik (0-255) karşılığını alır.
+        checksum = (-data_sum) & 0xFF
         command_packet[36] = checksum
 
         # --- Send the final packet ---
@@ -1015,7 +1021,7 @@ class UARTMonitor(QMainWindow):
             port_text = self.com_combo.currentText().split(' - ')[0]
             baud_rate = int(self.baud_combo.currentText())
             
-            self.serial_port = serial.Serial(port_text, baud_rate, timeout=0.1)
+            self.serial_port = serial.Serial(port_text, baud_rate, timeout=0.1, parity=serial.PARITY_EVEN)
             self.is_connected = True
             
             self.connect_btn.setText("⏸ DISCONNECT")
@@ -1069,6 +1075,7 @@ class UARTMonitor(QMainWindow):
             if self.serial_port.in_waiting > 0:
                 new_data = self.serial_port.read(self.serial_port.in_waiting)
                 self.read_buffer.extend(new_data)
+                
             
             # Buffer'da yeterli veri var mı kontrol et
             while len(self.read_buffer) >= self.PACKET_SIZE:
@@ -1079,7 +1086,6 @@ class UARTMonitor(QMainWindow):
                     # Header kontrolü
                     if (self.read_buffer[i] == self.HEADER_1 and 
                         self.read_buffer[i+1] == self.HEADER_2):
-                        
                         # Tam bir paket çıkar
                         packet = bytes(self.read_buffer[i:i+self.PACKET_SIZE])
                         
@@ -1104,10 +1110,11 @@ class UARTMonitor(QMainWindow):
                     else:
                         break
                 
-            # Buffer çok büyüdüyse temizle (güvenlik önlemi)
+            # Buffer çok büyüdüyse temizle 
             if len(self.read_buffer) > self.PACKET_SIZE * 3:
                 print("Buffer overflow, temizleniyor...")
                 self.read_buffer.clear()
+        
                 
         except Exception as e:
             print(f"Read error: {e}")
